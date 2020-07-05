@@ -1,0 +1,24 @@
+{
+  "devDependencies": {
+    "@atakama/qtest": "^1.6.0",
+    "nyc": "^15.1.0"
+  },
+  "engines": {
+    "node": ">=8"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AtakamaLLC/capio.git"
+  },
+  "keywords": [
+    "coverage",
+    "diffs",
+    "diff"
+  ],
+  "author": "Erik Aronesty",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/AtakamaLLC/capio/issues"
+  },
+  "homepage": "https://github.com/AtakamaLLC/capio#readme"
+}
