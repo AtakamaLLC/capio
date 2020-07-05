@@ -1,0 +1,12 @@
+language: node_js
+node_js:
+  - 10
+  - 14
+
+script:
+  - yarn test
+  - yarn lint
+  - yarn codecov
+
+install:
+  - yarn
