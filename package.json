@@ -7,6 +7,11 @@
       "*.md",
       "*.js"
   ],
+  "scripts": {
+    "lint": "eslint *.js",
+    "test": "node test.js",
+    "coverage": "nyc --reporter lcov --reporter text-summary yarn test"
+  },
   "devDependencies": {
     "@atakama/qtest": "^1.6.0",
     "nyc": "^15.1.0"
