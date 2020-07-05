@@ -1,4 +1,12 @@
 {
+  "name": "@atakama/capio",
+  "version": "0.0.1",
+  "description": "Capture logs and i/o in an async-safe way",
+  "main": "capio.js",
+  "files": [
+      "*.md",
+      "*.js"
+  ],
   "devDependencies": {
     "@atakama/qtest": "^1.6.0",
     "nyc": "^15.1.0"
