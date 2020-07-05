@@ -4,8 +4,8 @@
   "description": "Capture logs and i/o in an async-safe way",
   "main": "capio.js",
   "files": [
-      "*.md",
-      "*.js"
+    "*.md",
+    "*.js"
   ],
   "scripts": {
     "lint": "eslint *.js",
@@ -14,6 +14,8 @@
   },
   "devDependencies": {
     "@atakama/qtest": "^1.6.0",
+    "eslint": "^7.4.0",
+    "eslint-plugin-standard": "^4.0.1",
     "nyc": "^15.1.0"
   },
   "engines": {
