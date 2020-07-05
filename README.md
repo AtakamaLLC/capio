@@ -5,9 +5,9 @@ When writing unit test for complex async code it's somtimes difficult to isolate
 Node's [async_hooks](https://nodejs.org/api/async_hooks.html) library provides enough information to allow
 globals to be swapped in and out.
 
-Alternately, the deprecated [domain](https://nodejs.org/api/domain.html) module can be used.
+Alternately, the deprecated [domain](https://nodejs.org/api/domain.html) module is used if needed.
 
-Capio wraps both of these libraries
+Capio wraps both of these libraries, meaning you don't have to think about which version of node you're running.
 
 ### Console log capture:
 
@@ -27,15 +27,16 @@ When run linearly, we can use the simple [capture_console](https://www.npmjs.com
 
 However, if we want to run `thing1` and `thing2` in parallel, the logs will get jumbled up.
 
-Capio allows this to work:
+Capio injects a 'captio' member to errors, which allows this to work:
 
 ```node
 run1 = async (test) => {
     try {
         await capio.captureLog(test)
     } except (e) {
-        console.log(e) 
-        e.log.map(args => console.log(...args))
+        for (args of e.capio) {
+            console.log(...args)
+        }
     }
 }
 

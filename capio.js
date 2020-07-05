@@ -16,30 +16,21 @@
  *
  */
 
-const { createHook, executionAsyncId} = require('async_hooks');
-
+const { AsyncLocalStorage } = require('async_hooks');
 const createDomain = require('domain').create;
+
 const fs = require('fs')
 const util = require('util')
-const assert = require('assert')
 
 class Capio extends Function {
     constructor (opts) {
         super('...args', 'return this._bound.add(...args)')
         this._bound = this.bind(this)
         const inst = this._bound
-        inst._chain = new Map()
-        inst._hooks = new Map()
-        inst._restore = ()=>{}
-        inst._caps = 0
         inst.opts = opts || {}
-        inst._asyncHook = createHook({
-            init: inst.onAsyncInit.bind(inst),
-            before: inst.onAsyncBefore.bind(inst),
-            after: inst.onAsyncAfter.bind(inst),
-            destroy: inst.onAsyncDone.bind(inst),
-            promiseResolve: inst.onAsyncDone.bind(inst)
-        })
+        if (AsyncLocalStorage) {
+            inst._asyncStore = new AsyncLocalStorage();
+        }
         return inst
     }
 
@@ -50,81 +41,84 @@ class Capio extends Function {
     }
     
     errLog(...args) {
-        if (this.opts.debug) {
-            fs.writeSync(1, util.format(...args) + "\n")
-        }
+        fs.writeSync(1, util.format(...args) + "\n")
     }
 
-    onAsyncInit(id, type, trigger) {
-        if (type != "PROMISE") {
-            return
-        }
-        this._chain.set(id, trigger)
-        let hooks = this._hooks.get(trigger)
-        if (hooks) {
-            this._hooks.set(id, hooks)
-            this.debugLog("init", id, trigger)
-        }
+    async hook(...args) {
+        if (AsyncLocalStorage)
+            await this.hookAsync(...args)
+        else
+            await this.hookDomain(...args)
     }
-    onAsyncBefore(id) {
-        const hooks = this._hooks.get(id)
-        if (hooks) {
-            this.debugLog("before", id, hooks[2])
-            hooks[0]()
+
+    async hookAsync(duringFunc, obj, methodName, newFunc) {
+        const orig = obj[methodName]
+        obj[methodName] = (...args) => {
+            const call = this._asyncStore.getStore() || orig
+            call(...args)
         }
-    }
-    onAsyncAfter(id) {
-        const hooks = this._hooks.get(id)
-        if (hooks) {
-            this.debugLog("after", id, hooks[2])
-            hooks[1]()
-        }
-    }
-    onAsyncDone(id) {
-        if (this._hooks.get(id)) {
-            this.debugLog("done", id)
-        }
-        this._hooks.delete(id)
-        this._chain.delete(id)
-        this._chain.forEach((v, k)=>{
-            if (v === id) {
-                this.onAsyncDone(k)
-            }
+        return await this._asyncStore.run(newFunc, () => {
+            this._asyncStore.enterWith(newFunc);
+            return duringFunc()
         })
     }
-
-    async capture(duringFunc, obj, methodName, newFunc) {
+    
+    async hookDomain(duringFunc, obj, methodName, newFunc) {
         const domain = createDomain();
         const orig = obj[methodName]
 
         obj[methodName] = (...args) => {
-            if (process.domain && process.domain.hook) {
-                process.domain.hook(...args)
-            } else {
-                return orig(...args)
-            }
+            const call = (process.domain && process.domain.hook) || orig
+            return call(...args)
         }
         domain.hook = newFunc
         await domain.run(duringFunc)
     }
 
     async captureIo(func, streams, opts) {
-        opts = opts || {}
-        opts.id=Math.random()
-        return await Promise.all(streams.map( stream => this.captureWriteStream(func, stream, opts)))
+        if (!Array.isArray(streams))
+            return await this.captureWriteStream(func, streams, opts)
+
+        // grab all results, even if they fail
+        let needThrow = null
+        const res = await Promise.all(streams.map( async (stream) => {
+            try {
+                return await this.captureWriteStream(func, stream, opts)
+            } catch (e) {
+                needThrow = e
+                return e.capio
+            }
+        }))
+
+        // throw an error with the first-to fail, and any other results if we have it
+        if (needThrow) {
+            needThrow.capio = res
+            throw(needThrow)
+        }
+        return res
     }
     
-    async captureWriteStream(func, stream) {
+    async captureWriteStream(func, stream, opts) {
+        opts = opts || {}
+        let original = stream.write
         let cap = ""
-        let newWrite = (data) => {
+        let newWrite = (data, ...args) => {
             cap += data 
+            if (opts.spy) {
+                original(data, ...args)
+            }
         }
-        await this.capture(func, stream, "write", newWrite)
+        try {
+            await this.hook(func, stream, "write", newWrite)
+        } catch (e) {
+            e.capio = cap
+            throw(e)
+        }
 
         return cap
     }
 
-    async captureLog(func, stream, opts) {
+    async captureLog(func, opts) {
         opts = opts || {}
         let original = console.log
         let cap = []
@@ -134,10 +128,12 @@ class Capio extends Function {
                 original(...args)
             }
         }
-        await this.capture(async ()=>{
-            await func()
-        }, ()=>{console.log=newLog}, ()=>{console.log=original}, opts.id)
-        
+        try {
+            await this.hook(func, console, "log", newLog)
+        } catch (e) {
+            e.capio = cap
+        }
+
         return cap
     }
 }
