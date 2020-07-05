@@ -10,8 +10,6 @@ async function sleep(msecs) {
 }
 
 test('one-io', async () => {
-    let original = process.stderr.write
-
     let io_a = capio.captureIo(async ()=>{
         console.error("##a 1")
         await sleep(100)
@@ -21,12 +19,9 @@ test('one-io', async () => {
     let ios = await io_a
 
     assert.deepEqual(ios, ['##a 1\n##a 2\n' ])
-    assert.equal(process.stderr.write, original)
 })
 
 test('two-io', async () => {
-    let original = process.stderr.write
-
     let io_a = capio.captureIo(async ()=>{
         console.error("##a 1")
         capio.debugLog("##a 1")
@@ -42,7 +37,6 @@ test('two-io', async () => {
     let ios = await Promise.all([io_a, io_b])
 
     assert.deepEqual(ios, [['##a 1\n##a 2\n' ], [ '##b 1\n##b 2\n' ] ])
-    assert.strictEqual(process.stderr.write, original)
 })
 
 test('simple log', async () => {

@@ -93,32 +93,19 @@ class Capio extends Function {
         })
     }
 
-    async capture(func, before, after, debugTag) {
-        const aid = executionAsyncId()
+    async capture(duringFunc, obj, methodName, newFunc) {
+        const domain = createDomain();
+        const orig = obj[methodName]
 
-        // if the user passes an async function, it' no mas
-        const asyncFunc = (async() => {}).constructor
-        assert.ok(before.constructor !== asyncFunc)
-        assert.ok(after.constructor !== asyncFunc)
-
-        let hook = [before, after, debugTag]
-        this._hooks.set(aid, hook)
-        this._asyncHook.enable()
-        this.debugLog("capture", debugTag, this._caps)
-        this._caps += 1
-        this._restore()
-        this._restore = after
-        before()
-        await func()
-        after()
-        this.onAsyncDone(aid)
-        this._caps -= 1
-        if (this._caps == 0) {
-            this._asyncHook.disable()
-            this._chain = new Map()
-            this._hooks = new Map()
+        obj[methodName] = (...args) => {
+            if (process.domain && process.domain.hook) {
+                process.domain.hook(...args)
+            } else {
+                return orig(...args)
+            }
         }
-        this.debugLog("cleanup", debugTag, this._caps, this._chain, this._hooks)
+        domain.hook = newFunc
+        await domain.run(duringFunc)
     }
 
     async captureIo(func, streams, opts) {
@@ -127,19 +114,12 @@ class Capio extends Function {
         return await Promise.all(streams.map( stream => this.captureWriteStream(func, stream, opts)))
     }
     
-    async captureWriteStream(func, stream, opts) {
-        opts = opts || {}
-        let original = stream.write
+    async captureWriteStream(func, stream) {
         let cap = ""
-        let newWrite = (data, ...args) => {
+        let newWrite = (data) => {
             cap += data 
-            if (opts.spy) {
-                original(data, ...args)
-            }
         }
-        await this.capture(async ()=>{
-            await func()
-        },()=>{this.debugLog("start", opts.id); stream.write=newWrite}, ()=>{this.debugLog("end", opts.id); stream.write=original}, opts.id)
+        await this.capture(func, stream, "write", newWrite)
 
         return cap
     }
