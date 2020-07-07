@@ -22,16 +22,27 @@ const createDomain = require('domain').create;
 const fs = require('fs')
 const util = require('util')
 
-class Capio extends Function {
+function padZero(num, pad) {
+  return ('0'.repead(pad)+num).slice(-pad);
+}
+
+function timeFmt() {
+  const t = new Date()
+  const nn = padZero(t.getMinutes(), 2)
+  const ss = padZero(t.getSeconds(), 2)
+  const mmm = padZero(t.getMilliseconds(), 3)
+  return nn + ":" + ss + "." + mmm 
+}
+
+function stackInfo() {
+}
+
+class Capio {
     constructor (opts) {
-        super('...args', 'return this._bound.add(...args)')
-        this._bound = this.bind(this)
-        const inst = this._bound
-        inst.opts = opts || {}
+        this.opts = opts || {}
         if (AsyncLocalStorage) {
-            inst._asyncStore = new AsyncLocalStorage();
+            this._asyncStore = new AsyncLocalStorage();
         }
-        return inst
     }
 
     debugLog(...args) {
@@ -46,9 +57,9 @@ class Capio extends Function {
 
     async hook(...args) {
         if (AsyncLocalStorage)
-            await this.hookAsync(...args)
+            return await this.hookAsync(...args)
         else
-            await this.hookDomain(...args)
+            return await this.hookDomain(...args)
     }
 
     async hookAsync(duringFunc, obj, methodName, newFunc) {
@@ -72,7 +83,7 @@ class Capio extends Function {
             return call(...args)
         }
         domain.hook = newFunc
-        await domain.run(duringFunc)
+        return await domain.run(duringFunc)
     }
 
     async captureIo(func, streams, opts) {
@@ -121,17 +132,25 @@ class Capio extends Function {
     async captureLog(func, opts) {
         opts = opts || {}
         let original = console.log
-        let cap = []
+        let cap = opts.into || []
         let newLog = (...args) => {
+            if (opts.prefix === true) {
+              let prefix = "[" + timeFmt(opts) + " " + stackInfo(opts) + "]"
+              args.unshift(prefix)
+            }
             cap.push(args)
             if (opts.spy) {
                 original(...args)
             }
         }
         try {
-            await this.hook(func, console, "log", newLog)
+            const res = await this.hook(func, console, "log", newLog)
+            if (opts.into) {
+              return res
+            }
         } catch (e) {
-            e.capio = cap
+            e.caplog = cap
+            throw(e)
         }
 
         return cap
@@ -141,6 +160,7 @@ class Capio extends Function {
 
 const manager = new Capio()
 
-manager.Capio = Capio
-
-module.exports = manager
+module.exports.Capio = Capio
+module.exports.errLog = manager.errLog
+module.exports.captureIo = (...args) => manager.captureIo(...args)
+module.exports.captureLog = (...args) => manager.captureLog(...args)
